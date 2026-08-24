@@ -55,14 +55,12 @@
       </div>`;
   }
 
+  // Replace the chart function used by app.js render().
   window.drawChart = drawComparisonChart;
 
-  // app.js loads data immediately. Wait until its state is populated,
-  // then redraw using the new comparison chart.
-  const timer = setInterval(() => {
-    if (window.state && Array.isArray(window.state.data) && window.state.data.length) {
-      clearInterval(timer);
-      drawComparisonChart(window.state.data);
-    }
-  }, 50);
+  // app.js performs its initial load before this patch is loaded.
+  // Reload once so render() uses the new chart function.
+  if (typeof window.load === 'function') {
+    window.load();
+  }
 })();
