@@ -12,84 +12,26 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">RST • ROBOTIC SPECIAL TEAM</div>
-        <h1>CB Production Dashboard</h1>
-        <p class="subtitle">Weekly production overview • Last week vs this week</p>
-      </div>
-      <div class="controls">
-        <button id="refreshBtn" class="btn">↻ Refresh data</button>
-        <span id="updatedAt" class="updated">Loading…</span>
-      </div>
+      <div><div class="eyebrow">RST • ROBOTIC SPECIAL TEAM</div><h1>CB Production Dashboard</h1><p class="subtitle">Production command center • Last week vs this week</p></div>
+      <div class="controls"><button id="refreshBtn" class="btn">↻ Refresh data</button><span id="updatedAt" class="updated">Loading…</span></div>
     </header>
-
     <main>
+      <div id="weekProgress" class="week-progress">Week in Progress</div>
       <section class="hero-grid">
-        <div class="hero-card">
-          <span class="card-label">This Week</span>
-          <strong id="thisWeekTotal">—</strong>
-          <small id="thisWeekRange">—</small>
-        </div>
-        <div class="hero-card">
-          <span class="card-label">Last Week</span>
-          <strong id="lastWeekTotal">—</strong>
-          <small id="lastWeekRange">—</small>
-        </div>
-        <div class="hero-card attention-card">
-          <span class="card-label">Need Attention</span>
-          <strong id="attentionCount">—</strong>
-          <small>CBs with 1–7 output</small>
-        </div>
-        <div class="hero-card">
-          <span class="card-label">Target Hit</span>
-          <strong id="targetCount">—</strong>
-          <small>CBs with 15+ output</small>
-        </div>
+        <div class="hero-card"><span class="card-label">This Week</span><strong id="thisWeekTotal">—</strong><small id="thisWeekRange">—</small></div>
+        <div class="hero-card"><span class="card-label">Last Week</span><strong id="lastWeekTotal">—</strong><small id="lastWeekRange">—</small></div>
+        <div class="hero-card attention-card"><span class="card-label">Need Attention</span><strong id="attentionCount">—</strong><small>Current week: 1–7 output</small></div>
+        <div class="hero-card target-card"><span class="card-label">Target Hit</span><strong id="targetCount">—</strong><small>Current week: 15+ output</small></div>
       </section>
-
       <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Production by CB</h2>
-            <p>Current-week output is color-coded by your production bands.</p>
-          </div>
-          <div class="legend">
-            <span><i class="dot red"></i>1–7 Need Attention</span>
-            <span><i class="dot green"></i>8–14 On Track</span>
-            <span><i class="dot orange"></i>15+ Target Hit</span>
-          </div>
-        </div>
+        <div class="panel-head"><div><h2>Production by CB</h2><p>Lowest producers are shown first. Use the colors to identify status instantly.</p></div><div class="legend"><span><i class="dot red"></i>1–7 Need Attention</span><span><i class="dot green"></i>8–14 On Track</span><span><i class="dot orange"></i>15+ Target Hit</span></div></div>
         <div id="chart" class="chart-wrap"></div>
       </section>
-
       <section class="panel">
-        <div class="panel-head table-head">
-          <div>
-            <h2>CB Performance Table</h2>
-            <p>Sorted from lowest to highest current-week production so low producers stand out immediately.</p>
-          </div>
-          <input id="searchBox" class="search" placeholder="Search CB…" />
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>CB</th><th>Last Week</th><th>This Week</th><th>Change</th><th>Status</th></tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
+        <div class="panel-head table-head"><div><h2>CB Performance</h2><p>Every CB in the reporting list, ranked by current-week output.</p></div><input id="searchBox" class="search" placeholder="Search CB…" /></div>
+        <div class="table-scroll"><table><thead><tr><th>CB</th><th>Last Week</th><th>This Week</th><th>Change</th><th>Status</th></tr></thead><tbody id="tableBody"></tbody></table></div>
       </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Weekly Comparison</h2>
-            <p>Side-by-side output for the two reporting weeks.</p>
-          </div>
-        </div>
-        <div id="comparison" class="comparison-grid"></div>
-      </section>
-
+      <section class="panel"><div class="panel-head"><div><h2>Weekly Comparison</h2><p>Last week and current-week production for each CB.</p></div></div><div id="comparison" class="comparison-grid"></div></section>
       <div id="error" class="error hidden"></div>
     </main>
     <footer>Data source: published Google Sheet • Thresholds: 1–7 Need Attention · 8–14 On Track · 15+ Target Hit</footer>
