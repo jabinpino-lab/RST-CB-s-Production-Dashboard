@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="chart-overrides.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -26,7 +27,7 @@
         <div class="hero-card target-card"><span class="card-label">Target Hit</span><strong id="targetCount">—</strong><small>Current week: 15+ output</small></div>
       </section>
       <section class="panel">
-        <div class="panel-head"><div><h2>Production by CB</h2><p>Lowest producers are shown first. Use the colors to identify status instantly.</p></div><div class="legend"><span><i class="dot red"></i>1–7 Need Attention</span><span><i class="dot green"></i>8–14 On Track</span><span><i class="dot orange"></i>15+ Target Hit</span></div></div>
+        <div class="panel-head"><div><h2>Production by CB</h2><p>Last Week and This Week are shown side-by-side for every CB.</p></div><div class="legend"><span><i class="dot red"></i>1–7 Need Attention</span><span><i class="dot green"></i>8–14 On Track</span><span><i class="dot orange"></i>15+ Target Hit</span></div></div>
         <div id="chart" class="chart-wrap"></div>
       </section>
       <section class="panel">
@@ -39,5 +40,6 @@
     <footer>Data source: published Google Sheet • Thresholds: 1–7 Need Attention · 8–14 On Track · 15+ Target Hit</footer>
   </div>
   <script src="app.js"></script>
+  <script src="chart-patch.js"></script>
 </body>
 </html>
