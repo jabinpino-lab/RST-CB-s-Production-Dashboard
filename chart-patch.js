@@ -12,7 +12,7 @@
     $('chart').innerHTML = `
       <div class="chart-note">
         <span>Last week vs this week • Highest output first</span>
-        <span>Names are vertical for easier reading</span>
+        <span>CB names are horizontal for easy reading</span>
       </div>
       <div class="comparison-chart">
         <div class="y-scale">
@@ -41,7 +41,7 @@
                       <div class="bar this-bar ${thisCls}" style="height:${thisHeight}px"></div>
                     </div>
                   </div>
-                  <div class="vertical-name" title="${escapeHtml(x.name)}">
+                  <div class="horizontal-name" title="${escapeHtml(x.name)}">
                     ${escapeHtml(x.name.split('@')[0])}
                   </div>
                 </div>`;
@@ -55,11 +55,8 @@
       </div>`;
   }
 
-  // Replace the chart function used by app.js render().
   window.drawChart = drawComparisonChart;
 
-  // app.js performs its initial load before this patch is loaded.
-  // Reload once so render() uses the new chart function.
   if (typeof window.load === 'function') {
     window.load();
   }
