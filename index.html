@@ -6,7 +6,7 @@
   <title>RST — CB Production Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="chart-overrides.css" />
 </head>
@@ -17,9 +17,7 @@
       <div class="controls"><button id="refreshBtn" class="btn">↻ Refresh data</button><span id="updatedAt" class="updated">Loading…</span></div>
     </header>
     <main>
-      <div id="weekProgress" class="week-progress">
-  <span>Week in Progress</span>
-</div>
+      <div id="weekProgress" class="week-progress"><span>Week in Progress</span></div>
       <section class="hero-grid">
         <div class="hero-card"><span class="card-label">This Week</span><strong id="thisWeekTotal">—</strong><small id="thisWeekRange">—</small></div>
         <div class="hero-card"><span class="card-label">Last Week</span><strong id="lastWeekTotal">—</strong><small id="lastWeekRange">—</small></div>
