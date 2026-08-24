@@ -12,11 +12,13 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div><div class="eyebrow">RST • ROBOTIC SPECIAL TEAM</div><h1>CB Production Dashboard</h1><p class="subtitle">Production command center • Last week vs this week</p></div>
+      <div><div class="eyebrow">RST • ROBOTIC SPECIAL TASKER</div><h1>CB Production Dashboard</h1><p class="subtitle">Production command center • Last week vs this week</p></div>
       <div class="controls"><button id="refreshBtn" class="btn">↻ Refresh data</button><span id="updatedAt" class="updated">Loading…</span></div>
     </header>
     <main>
-      <div id="weekProgress" class="week-progress">Week in Progress</div>
+      <div id="weekProgress" class="week-progress">
+  <span>Week in Progress</span>
+</div>
       <section class="hero-grid">
         <div class="hero-card"><span class="card-label">This Week</span><strong id="thisWeekTotal">—</strong><small id="thisWeekRange">—</small></div>
         <div class="hero-card"><span class="card-label">Last Week</span><strong id="lastWeekTotal">—</strong><small id="lastWeekRange">—</small></div>
