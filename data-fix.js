@@ -93,9 +93,8 @@
     const el = document.getElementById('weekProgress');
     if (!el) return;
 
-    const start = startOfTuesdayWeek(new Date());
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
+    const start = new Date(2026, 8, 29);
+    const end = new Date(2026, 9, 5);
 
     const opts = { month: 'long', day: 'numeric', year: 'numeric' };
     el.textContent =
