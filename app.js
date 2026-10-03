@@ -84,9 +84,11 @@ function extractAttendanceEmails(matrix) {
 
   const emails = new Set();
 
-  // Attendance is a separate tab. Treat every cell containing a normal
-  // email address as an attending CB. Avoid a regex here so escaping in
-  // generated source cannot prevent valid emails from being detected.
+  // Attendance source of truth: Column F = Active Email.
+  // Ignore emails in every other Attendance column so inactive/other
+  // email fields cannot accidentally become part of the CB roster.
+  const activeEmailCol = 5;
+
   const isEmail = value => {
     const email = clean(value).toLowerCase();
     const at = email.indexOf('@');
@@ -94,11 +96,9 @@ function extractAttendanceEmails(matrix) {
     return at > 0 && dot > at + 1 && dot < email.length - 1 && !email.includes(' ');
   };
 
-  for (const row of matrix) {
-    for (const cell of row) {
-      const value = clean(cell).replace(/,/g, '');
-      if (isEmail(value)) emails.add(value);
-    }
+  for (let i = 1; i < matrix.length; i++) {
+    const value = clean(matrix[i][activeEmailCol]).replace(/,/g, '');
+    if (isEmail(value)) emails.add(value);
   }
 
   return emails;
