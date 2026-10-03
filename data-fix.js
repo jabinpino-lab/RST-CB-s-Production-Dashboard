@@ -116,11 +116,15 @@
 
     // Use the actual reporting-table labels instead of fixed column numbers.
     // The supplied sheet has separate sections for Today, This Week and Last Week.
-    const workerEmailCol = findCol(/^worker\s*email(?:\.\\d+)?$/i, /worker\s*email/i);
-    const thisWeekEmailCol = findCol(/^worker\s*email(?:\.1)?$/i);
-    const lastWeekEmailCol = findCol(/^worker\s*email(?:\.2)?$/i);
+    const workerEmailCol = findCol(/worker\s*email/i);
     const thisWeekCountCol = findCol(/^submitted\s*this\s*week$/i, /submitted.*this.*week/i);
     const lastWeekCountCol = findCol(/^submitted\s*last\s*week$/i, /submitted.*last.*week/i);
+
+    // The CSV contains repeated "Worker Email" headers for separate sections.
+    // Do not depend on parser-generated .1/.2 suffixes. Each weekly count is
+    // paired with the Worker Email immediately to its left in the reporting table.
+    const thisWeekEmailCol = thisWeekCountCol > 0 ? thisWeekCountCol - 1 : -1;
+    const lastWeekEmailCol = lastWeekCountCol > 0 ? lastWeekCountCol - 1 : -1;
 
     const attendanceCols = header
       .map((h, i) => /attendance/.test(h) ? i : -1)
@@ -181,20 +185,8 @@
       }
     }
 
-    // If duplicate Worker Email headers were not preserved by the CSV parser,
-    // fall back to locating the email immediately before each section's count.
-    if (thisWeekCountCol >= 0 || lastWeekCountCol >= 0) {
-      for (const r of rows) {
-        if (thisWeekCountCol >= 0 && thisWeekEmailCol < 0) {
-          const item = ensure(r[thisWeekCountCol - 1]);
-          if (item) item.this = num(r[thisWeekCountCol]);
-        }
-        if (lastWeekCountCol >= 0 && lastWeekEmailCol < 0) {
-          const item = ensure(r[lastWeekCountCol - 1]);
-          if (item) item.last = num(r[lastWeekCountCol]);
-        }
-      }
-    }
+    // Weekly email columns are derived from the corresponding count columns,
+    // so duplicate Worker Email headers cannot cross-wire the two weeks.
 
     // If Attendance data is available, filter everything to that roster.
     // If the sheet has no Attendance column, retain the reporting summary
