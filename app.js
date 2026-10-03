@@ -1,5 +1,7 @@
 const DATA_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vSdXbqQMwQexp1zCBc_KlIFanBr9UoOaxyDL_3keNkKUvmuujQNTPPfhDdBeMg6NhlMp9i_1kINnjC1/pub?gid=1105569847&single=true&output=csv';
+const ATTENDANCE_URL =
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSdXbqQMwQexp1zCBc_KlIFanBr9UoOaxyDL_3keNkKUvmuujQNTPPfhDdBeMg6NhlMp9i_1kINnjC1/pub?gid=138909060&single=true&output=csv';
 
 let state = { data: [] };
 
@@ -77,7 +79,25 @@ function updateWeekProgress() {
     `Week in Progress: ${thisStart.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`;
 }
 
-function extractSummary(matrix) {
+function extractAttendanceEmails(matrix) {
+  if (!Array.isArray(matrix) || matrix.length < 2) return new Set();
+
+  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi;
+  const emails = new Set();
+
+  // Attendance is a separate tab. Treat every email present in the
+  // published Attendance CSV as an attending CB.
+  for (const row of matrix) {
+    for (const cell of row) {
+      const matches = clean(cell).match(emailPattern) || [];
+      for (const email of matches) emails.add(email.toLowerCase().trim());
+    }
+  }
+
+  return emails;
+}
+
+function extractSummary(matrix, attendanceEmails = new Set()) {
   if (!Array.isArray(matrix) || matrix.length < 2) return [];
 
   const header = matrix[0].map(v => clean(v).toLowerCase());
@@ -89,67 +109,24 @@ function extractSummary(matrix) {
     return -1;
   };
 
-  // The reporting summary has repeated Worker Email columns. Therefore
-  // weekly email columns are derived from their unique count columns.
+  // The reporting summary has repeated Worker Email columns. Derive each
+  // weekly email column from the Worker Email immediately before its
+  // corresponding Submitted This/Last Week column.
   const thisWeekCountCol =
-    findCol(/^submitted\s*this\s*week$/, /submitted.*this.*week/i);
+    findCol(/^submitted\\s*this\\s*week$/, /submitted.*this.*week/i);
   const lastWeekCountCol =
-    findCol(/^submitted\s*last\s*week$/, /submitted.*last.*week/i);
+    findCol(/^submitted\\s*last\\s*week$/, /submitted.*last.*week/i);
 
   const thisWeekEmailCol = thisWeekCountCol > 0 ? thisWeekCountCol - 1 : -1;
   const lastWeekEmailCol = lastWeekCountCol > 0 ? lastWeekCountCol - 1 : -1;
 
-  const workerEmailCols = header
-    .map((h, i) => /worker\s*email/i.test(h) ? i : -1)
-    .filter(i => i >= 0);
-
-  const attendanceCols = header
-    .map((h, i) => /attendance/i.test(h) ? i : -1)
-    .filter(i => i >= 0);
-
-  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i;
   const normalizeEmail = v => clean(v).toLowerCase();
-  const attendanceEmails = new Set();
-
-  // Attendance can be represented either by email(s) in the Attendance
-  // column or by a status next to a Worker Email column.
-  for (const r of rows) {
-    for (const col of attendanceCols) {
-      const cell = clean(r[col]);
-      const directEmails = cell.match(emailPattern) || [];
-      for (const email of directEmails) attendanceEmails.add(normalizeEmail(email));
-
-      if (!directEmails.length && cell) {
-        const negative =
-          /^(absent|not attending|not present|off|leave|on leave|no|false|0|n\/a)$/i.test(cell);
-        if (!negative) {
-          // Use the Worker Email column closest to this Attendance column.
-          let nearest = -1, distance = Infinity;
-          for (const emailCol of workerEmailCols) {
-            const distanceToAttendance = Math.abs(emailCol - col);
-            if (distanceToAttendance < distance) {
-              nearest = emailCol;
-              distance = distanceToAttendance;
-            }
-          }
-          if (nearest >= 0) {
-            const email = normalizeEmail(r[nearest]);
-            if (emailPattern.test(email)) attendanceEmails.add(email);
-            emailPattern.lastIndex = 0;
-          }
-        }
-      }
-    }
-  }
 
   const result = new Map();
   const ensure = email => {
     const key = normalizeEmail(email);
-    if (!key || !emailPattern.test(key)) {
-      emailPattern.lastIndex = 0;
-      return null;
-    }
-    emailPattern.lastIndex = 0;
+    if (!emailPattern.test(key)) return null;
     if (!result.has(key)) result.set(key, { name: key, last: 0, this: 0 });
     return result.get(key);
   };
@@ -165,17 +142,16 @@ function extractSummary(matrix) {
     }
   }
 
-  // Attendance is authoritative whenever an Attendance column exists and
-  // produced a roster. Include attendees with zero output, then filter out
-  // everyone not on the Attendance roster.
-  if (attendanceCols.length && attendanceEmails.size) {
-    for (const email of attendanceEmails) {
-      if (!result.has(email)) result.set(email, { name: email, last: 0, this: 0 });
-    }
-    return [...result.values()].filter(x => attendanceEmails.has(x.name));
+  // Attendance is authoritative. Every attendee is shown, including 0 output.
+  // Anyone present only in the reporting summary is excluded.
+  if (attendanceEmails.size) {
+    return [...attendanceEmails].map(email => {
+      const item = result.get(email);
+      return item || { name: email, last: 0, this: 0 };
+    });
   }
 
-  return [...result.values()];
+  throw new Error('The Attendance sheet returned no CB emails.');
 }
 
 function escapeHtml(s) {
@@ -305,13 +281,27 @@ async function load() {
     const res = await fetch(DATA_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Google Sheet returned HTTP ${res.status}`);
 
-    const text = await res.text();
-    const matrix = parseCSV(text);
-    if (matrix.length < 2) throw new Error('The published sheet returned no usable rows.');
+    const [reportingRes, attendanceRes] = await Promise.all([
+      fetch(DATA_URL, { cache: 'no-store' }),
+      fetch(ATTENDANCE_URL, { cache: 'no-store' })
+    ]);
+    if (!reportingRes.ok) throw new Error(`Reporting sheet returned HTTP ${reportingRes.status}`);
+    if (!attendanceRes.ok) throw new Error(`Attendance sheet returned HTTP ${attendanceRes.status}`);
 
-    const data = extractSummary(matrix);
+    const [reportingText, attendanceText] = await Promise.all([
+      reportingRes.text(),
+      attendanceRes.text()
+    ]);
+
+    const matrix = parseCSV(reportingText);
+    const attendanceMatrix = parseCSV(attendanceText);
+    if (matrix.length < 2) throw new Error('The published reporting sheet returned no usable rows.');
+    if (attendanceMatrix.length < 2) throw new Error('The published Attendance sheet returned no usable rows.');
+
+    const attendanceEmails = extractAttendanceEmails(attendanceMatrix);
+    const data = extractSummary(matrix, attendanceEmails);
     if (!data.length) {
-      throw new Error('No CB records were detected in the published production sheet. Check the Attendance and reporting summary columns.');
+      throw new Error('No CB records were detected for the published Attendance roster.');
     }
 
     state = { data, ...weekInfo() };
