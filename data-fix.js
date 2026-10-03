@@ -108,28 +108,69 @@
 
     const header = matrix[0].map(x => String(x ?? '').trim().toLowerCase());
 
-    // Only display CBs who are listed in the Attendance column.
-    // The attendance column may contain the CB email directly. If the
-    // attendance column is a status column, pair it with the Worker Email
-    // column on the same row.
-    // Attendance is stored in the reporting sheet as a list of CB emails.
-    // Match the Attendance header flexibly (for example: Attendance, Attendance CB).
+    // Attendance is the authoritative CB roster.
+    // The Attendance column can either contain email addresses directly,
+    // or contain an attendance/status value on the same row as Worker Email.
+    // In the latter case, Worker Email identifies the CB to display.
     const attendanceCols = header
       .map((h, i) => /attendance/.test(h) ? i : -1)
       .filter(i => i >= 0);
 
+    const workerEmailCols = header
+      .map((h, i) => /worker\\s*email|cb\\s*email|email/.test(h) ? i : -1)
+      .filter(i => i >= 0);
+
+    const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi;
     const attendanceEmails = new Set();
-    for (const r of matrix.slice(1)) {
-      for (const col of attendanceCols) {
-        const value = String(r[col] ?? '').trim();
-        // Accept cells that contain an email, including comma/space separated lists.
-        const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi) || [];
-        for (const email of matches) attendanceEmails.add(email.toLowerCase());
+
+    function normalizeEmail(value) {
+      return String(value ?? '').trim().toLowerCase();
+    }
+
+    function addAttendanceEmail(value) {
+      const matches = String(value ?? '').match(emailPattern) || [];
+      for (const email of matches) attendanceEmails.add(normalizeEmail(email));
+    }
+
+    function attendanceValueMeansPresent(value) {
+      const s = String(value ?? '').trim().toLowerCase();
+      if (!s) return false;
+      // These values explicitly indicate that the CB is not on attendance.
+      if (/^(absent|not attending|not present|off|leave|on leave|no|false|0|n\\/a)$/.test(s)) return false;
+      return true;
+    }
+
+    if (attendanceCols.length) {
+      for (const r of matrix.slice(1)) {
+        // Case 1: Attendance cells themselves contain one or more CB emails.
+        for (const col of attendanceCols) addAttendanceEmail(r[col]);
+
+        // Case 2: Attendance is a status/list column and Worker Email is
+        // elsewhere on the same row. A non-empty positive attendance value
+        // means that row's Worker Email is on Attendance.
+        if (workerEmailCols.length) {
+          const emails = [];
+          for (const col of workerEmailCols) {
+            const value = String(r[col] ?? '').trim();
+            if (emailPattern.test(value)) {
+              emailPattern.lastIndex = 0;
+              const matches = value.match(emailPattern) || [];
+              for (const email of matches) emails.push(email);
+            }
+            emailPattern.lastIndex = 0;
+          }
+
+          const present = attendanceCols.some(col => attendanceValueMeansPresent(r[col]));
+          if (present) {
+            for (const email of emails) attendanceEmails.add(normalizeEmail(email));
+          }
+        }
       }
     }
 
     function isAttending(email) {
-      return attendanceEmails.has(String(email ?? '').trim().toLowerCase());
+      // If Attendance is present in the sheet, only its roster is displayed.
+      return attendanceCols.length > 0 && attendanceEmails.has(normalizeEmail(email));
     }
 
     const now = new Date();
