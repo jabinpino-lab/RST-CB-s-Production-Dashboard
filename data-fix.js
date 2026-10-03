@@ -8,6 +8,17 @@
     const s = String(value ?? '').trim();
     if (!s) return null;
 
+    // Google Sheets can expose a date as a serial number.
+    // Serial 1 = 1899-12-31 in the Sheets/Excel-compatible date system.
+    if (/^\d+(?:\.\d+)?$/.test(s)) {
+      const serial = Number(s);
+      if (serial > 20000 && serial < 100000) {
+        const d = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+    }
+
     // ISO / Google timestamp / normal Date-compatible values first.
     const iso = new Date(s);
     if (!Number.isNaN(iso.getTime()) && /[-T:]/.test(s)) {
@@ -97,23 +108,26 @@
 
     const header = matrix[0].map(x => String(x ?? '').trim().toLowerCase());
 
-    // Prefer header names, with the known sheet positions as fallbacks.
-    let emailCol = header.findIndex(h =>
-      findColumn(h, ['worker email'], false)
-    );
-    let statusCol = header.findIndex(h =>
-      h === 'status' || h.includes('status')
-    );
-    let dateCol = header.findIndex(h =>
-      h.includes('submitted date') ||
-      h.includes('submission date') ||
-      h === 'submitted' ||
-      h.includes('date submitted')
-    );
+    // The production sheet has multiple Worker Email / Status / date fields.
+    // Use the known raw-submission columns so a similarly named summary column
+    // can never be selected accidentally.
+    // 19 = Worker Email, 20 = Status, 24 = Submitted Date.
+    let emailCol = 19;
+    let statusCol = 20;
+    let dateCol = 24;
 
-    if (emailCol < 0) emailCol = 19;
-    if (statusCol < 0) statusCol = 20;
-    if (dateCol < 0) dateCol = 24;
+    // If the expected columns are not present, fall back to header detection.
+    const maxColumns = Math.max(...matrix.map(r => r.length));
+    if (maxColumns <= 24) {
+      emailCol = header.findIndex(h => findColumn(h, ['worker email'], false));
+      statusCol = header.findIndex(h => h === 'status' || h.includes('status'));
+      dateCol = header.findIndex(h =>
+        h.includes('submitted date') ||
+        h.includes('submission date') ||
+        h === 'submitted' ||
+        h.includes('date submitted')
+      );
+    }
 
     // Official reporting list, if present.
     const officialCol = 36;
