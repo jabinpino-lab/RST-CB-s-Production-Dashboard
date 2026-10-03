@@ -1,37 +1,47 @@
-/* Live weekly production fix
-   Reporting weeks run Tuesday through Monday.
-   The published sheet's summary blocks are not used for the weekly
-   comparison because their boundaries may follow a different week cycle.
-   Instead, aggregate the underlying submitted records for:
-     - This week: Tuesday through Monday (through today)
-     - Last week: previous Tuesday through Monday
+/* Production dashboard data fix
+   Reporting week: Tuesday through Monday.
+   This patch is deliberately defensive because the published Google Sheet
+   can return dates in different text formats.
 */
 (function () {
   function parseSheetDate(value) {
     const s = String(value ?? '').trim();
     if (!s) return null;
 
-    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
+    // ISO / Google timestamp / normal Date-compatible values first.
+    const iso = new Date(s);
+    if (!Number.isNaN(iso.getTime()) && /[-T:]/.test(s)) {
+      iso.setHours(0, 0, 0, 0);
+      return iso;
+    }
 
-    const d = new Date(
-      Number(m[3]),
-      Number(m[1]) - 1,
-      Number(m[2])
-    );
+    // M/D/YYYY or MM/DD/YYYY, optionally followed by a time.
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) {
+      const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+    }
 
-    d.setHours(0, 0, 0, 0);
-    return d;
+    // YYYY/MM/DD fallback.
+    const y = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    if (y) {
+      const d = new Date(Number(y[1]), Number(y[2]) - 1, Number(y[3]));
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+    }
+
+    return null;
   }
 
-  // Tuesday = 0, Wednesday = 1, ... Monday = 6
   function startOfTuesdayWeek(date) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
-
-    const day = d.getDay();
-    const daysSinceTuesday = (day + 5) % 7;
-
+    const daysSinceTuesday = (d.getDay() + 5) % 7;
     d.setDate(d.getDate() - daysSinceTuesday);
     return d;
   }
@@ -40,26 +50,22 @@
     email = String(email ?? '').trim();
     if (!email) return;
 
-    const item =
-      map.get(email) || {
-        name: email,
-        last: 0,
-        this: 0
-      };
-
-    item[field] +=
-      Number(String(value ?? '').replace(/,/g, '')) || 0;
-
+    const item = map.get(email) || { name: email, last: 0, this: 0 };
+    item[field] += Number(String(value ?? '').replace(/,/g, '')) || 0;
     map.set(email, item);
   }
 
-  // Override the dashboard's week calculation so every displayed range
-  // follows Tuesday -> Monday.
+  function findColumn(header, candidates, fallback) {
+    const normalized = String(header ?? '').trim().toLowerCase();
+    for (const candidate of candidates) {
+      if (normalized === candidate || normalized.includes(candidate)) return true;
+    }
+    return false;
+  }
+
   window.weekInfo = function () {
     const now = new Date();
-
     const thisStart = startOfTuesdayWeek(now);
-
     const thisEnd = new Date(thisStart);
     thisEnd.setDate(thisEnd.getDate() + 7);
 
@@ -69,39 +75,56 @@
     const lastEnd = new Date(thisStart);
     lastEnd.setMilliseconds(-1);
 
-    return {
-      now,
-      thisStart,
-      thisEnd,
-      lastStart,
-      lastEnd
-    };
+    return { now, thisStart, thisEnd, lastStart, lastEnd };
   };
 
-  // Override the header's "Week in Progress" display as well.
   window.updateWeekProgress = function () {
-    const weekProgress = document.getElementById('weekProgress');
-    if (!weekProgress) return;
+    const el = document.getElementById('weekProgress');
+    if (!el) return;
 
-    const now = new Date();
-    const start = startOfTuesdayWeek(now);
+    const start = startOfTuesdayWeek(new Date());
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
 
-    const dateOptions = {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    };
-
-    weekProgress.textContent =
-      `Week in Progress: ${start.toLocaleDateString('en-US', dateOptions)} – ${end.toLocaleDateString('en-US', dateOptions)}`;
+    const opts = { month: 'long', day: 'numeric', year: 'numeric' };
+    el.textContent =
+      `Week in Progress: ${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`;
   };
 
   window.extractSummary = function (matrix) {
     const result = new Map();
-    const now = new Date();
+    if (!Array.isArray(matrix) || matrix.length < 2) return [];
 
+    const header = matrix[0].map(x => String(x ?? '').trim().toLowerCase());
+
+    // Prefer header names, with the known sheet positions as fallbacks.
+    let emailCol = header.findIndex(h =>
+      findColumn(h, ['worker email'], false)
+    );
+    let statusCol = header.findIndex(h =>
+      h === 'status' || h.includes('status')
+    );
+    let dateCol = header.findIndex(h =>
+      h.includes('submitted date') ||
+      h.includes('submission date') ||
+      h === 'submitted' ||
+      h.includes('date submitted')
+    );
+
+    if (emailCol < 0) emailCol = 19;
+    if (statusCol < 0) statusCol = 20;
+    if (dateCol < 0) dateCol = 24;
+
+    // Official reporting list, if present.
+    const officialCol = 36;
+    for (const r of matrix.slice(1)) {
+      const email = String(r[officialCol] ?? '').trim();
+      if (email && email.includes('@') && !result.has(email)) {
+        result.set(email, { name: email, last: 0, this: 0 });
+      }
+    }
+
+    const now = new Date();
     const thisStart = startOfTuesdayWeek(now);
 
     const thisEnd = new Date(thisStart);
@@ -113,38 +136,20 @@
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
 
-    // Keep the official CB reporting list from the summary table.
-    // Worker Email.2 = column 36.
     for (const r of matrix.slice(1)) {
-      const lastCb = String(r[36] ?? '').trim();
+      const email = String(r[emailCol] ?? '').trim();
+      const statusValue = String(r[statusCol] ?? '').trim().toLowerCase();
+      const date = parseSheetDate(r[dateCol]);
 
-      if (lastCb && !result.has(lastCb)) {
-        result.set(lastCb, {
-          name: lastCb,
-          last: 0,
-          this: 0
-        });
-      }
-    }
+      if (!email || !date) continue;
 
-    // Underlying production records:
-    // column 19 = Worker Email
-    // column 20 = status
-    // column 24 = submitted date
-    // Count submitted records into Tuesday-Monday periods.
-    for (const r of matrix.slice(1)) {
-      const email = String(r[19] ?? '').trim();
-      const submitted = String(r[20] ?? '').trim().toLowerCase();
-      const date = parseSheetDate(r[24]);
+      // Accept the normal Submitted value and common sheet variants.
+      if (!statusValue || !statusValue.includes('submitted')) continue;
 
-      if (!email || submitted !== 'submitted' || !date) continue;
-
-      // Last week: previous Tuesday through Monday.
       if (date >= lastStart && date < thisStart) {
         add(result, email, 'last', 1);
       }
 
-      // This week: current Tuesday through today.
       if (date >= thisStart && date < thisEnd && date <= todayEnd) {
         add(result, email, 'this', 1);
       }
@@ -153,9 +158,8 @@
     return [...result.values()];
   };
 
-  // app.js performs its first load before this file is evaluated. Run the
-  // corrected loader once more so the live dashboard uses the new week cycle.
-  if (typeof window.load === 'function') {
-    window.setTimeout(() => window.load(), 0);
-  }
+  // Re-run after all scripts are loaded so the overridden functions are used.
+  window.setTimeout(function () {
+    if (typeof window.load === 'function') window.load();
+  }, 50);
 })();
