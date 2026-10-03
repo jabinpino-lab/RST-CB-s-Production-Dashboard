@@ -107,6 +107,52 @@
     if (!Array.isArray(matrix) || matrix.length < 2) return [];
 
     const header = matrix[0].map(x => String(x ?? '').trim().toLowerCase());
+
+    // Only display CBs who are listed in the Attendance column.
+    // The attendance column may contain the CB email directly. If the
+    // attendance column is a status column, pair it with the Worker Email
+    // column on the same row.
+    const attendanceCols = header
+      .map((h, i) => /attendance/.test(h) ? i : -1)
+      .filter(i => i >= 0);
+
+    const emailCols = header
+      .map((h, i) => /(worker\s*email|email)/.test(h) ? i : -1)
+      .filter(i => i >= 0);
+
+    const attendanceEmails = new Set();
+
+    for (const r of matrix.slice(1)) {
+      for (const col of attendanceCols) {
+        const value = String(r[col] ?? '').trim();
+        if (value.includes('@')) attendanceEmails.add(value.toLowerCase());
+      }
+
+      // If Attendance is a status column, use the email from the same row.
+      if (attendanceCols.length && emailCols.length) {
+        const attendanceValue = attendanceCols
+          .map(col => String(r[col] ?? '').trim().toLowerCase())
+          .find(Boolean);
+
+        if (attendanceValue && !/absent|not attending|no show|leave|off/.test(attendanceValue)) {
+          for (const col of emailCols) {
+            const email = String(r[col] ?? '').trim();
+            if (email.includes('@')) {
+              attendanceEmails.add(email.toLowerCase());
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    function isAttending(email) {
+      // If the sheet exposes an Attendance column, it becomes the source
+      // of truth for which CB emails are displayed.
+      if (!attendanceCols.length) return true;
+      return attendanceEmails.has(String(email ?? '').trim().toLowerCase());
+    }
+
     const now = new Date();
     const thisStart = startOfTuesdayWeek(now);
     const thisEnd = new Date(thisStart);
@@ -208,7 +254,7 @@
       }
     }
 
-    return [...result.values()];
+    return [...result.values()].filter(item => isAttending(item.name));
   };
 
   // Re-run after all scripts are loaded so the overridden functions are used.
