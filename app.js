@@ -1,807 +1,330 @@
 const DATA_URL =
   'https://docs.google.com/spreadsheets/d/e/2PACX-1vSdXbqQMwQexp1zCBc_KlIFanBr9UoOaxyDL_3keNkKUvmuujQNTPPfhDdBeMg6NhlMp9i_1kINnjC1/pub?gid=1105569847&single=true&output=csv';
 
-let rows = [];
-let state = {};
+let state = { data: [] };
 
 const $ = id => document.getElementById(id);
 const clean = s => String(s ?? '').trim();
 
-
-// ============================================================
-// CSV PARSER
-// ============================================================
-
 function parseCSV(text) {
   const out = [];
-  let row = [];
-  let cell = '';
-  let q = false;
-
+  let row = [], cell = '', quoted = false;
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    const n = text[i + 1];
-
+    const c = text[i], n = text[i + 1];
     if (c === '"') {
-      if (q && n === '"') {
-        cell += '"';
-        i++;
-      } else {
-        q = !q;
-      }
-    }
-
-    else if (c === ',' && !q) {
+      if (quoted && n === '"') { cell += '"'; i++; }
+      else quoted = !quoted;
+    } else if (c === ',' && !quoted) {
+      row.push(cell); cell = '';
+    } else if ((c === '\n' || c === '\r') && !quoted) {
+      if (c === '\r' && n === '\n') i++;
       row.push(cell);
-      cell = '';
-    }
-
-    else if ((c === '\n' || c === '\r') && !q) {
-      if (c === '\r' && n === '\n') {
-        i++;
-      }
-
-      row.push(cell);
-
-      if (row.some(v => clean(v) !== '')) {
-        out.push(row);
-      }
-
-      row = [];
-      cell = '';
-    }
-
-    else {
-      cell += c;
-    }
+      if (row.some(v => clean(v) !== '')) out.push(row);
+      row = []; cell = '';
+    } else cell += c;
   }
-
   if (cell || row.length) {
     row.push(cell);
-
-    if (row.some(v => clean(v) !== '')) {
-      out.push(row);
-    }
+    if (row.some(v => clean(v) !== '')) out.push(row);
   }
-
   return out;
 }
-
-
-// ============================================================
-// NUMBER FORMATTER
-// ============================================================
 
 function num(v) {
   const n = Number(String(v ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 }
 
-
-// ============================================================
-// PRODUCTION STATUS
-// ============================================================
-
 function status(n) {
-  if (n === 0) {
-    return ['No Output', 'attention'];
-  }
-
-  if (n <= 7) {
-    return ['Need Attention', 'attention'];
-  }
-
-  if (n <= 14) {
-    return ['On Track', 'track'];
-  }
-
+  if (n === 0) return ['No Output', 'attention'];
+  if (n <= 7) return ['Need Attention', 'attention'];
+  if (n <= 14) return ['On Track', 'track'];
   return ['Target Hit', 'target'];
 }
 
-
-// ============================================================
-// DATE FORMATTER
-// ============================================================
-
 function fmt(d) {
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric'
-  });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-
-// ============================================================
-// WEEK INFORMATION
-// ============================================================
+function startOfTuesdayWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const daysSinceTuesday = (d.getDay() + 5) % 7;
+  d.setDate(d.getDate() - daysSinceTuesday);
+  return d;
+}
 
 function weekInfo() {
   const now = new Date();
-
-  // Monday = 0, Tuesday = 1 ... Sunday = 6
-  const day = (now.getDay() + 6) % 7;
-
-  // Start of current week - Monday
-  const thisStart = new Date(now);
-  thisStart.setHours(0, 0, 0, 0);
-  thisStart.setDate(now.getDate() - day);
-
-  // Start of previous week
+  const thisStart = startOfTuesdayWeek(now);
+  const thisEnd = new Date(thisStart);
+  thisEnd.setDate(thisEnd.getDate() + 7);
   const lastStart = new Date(thisStart);
-  lastStart.setDate(thisStart.getDate() - 7);
-
-  // End of previous week - Sunday 23:59:59.999
+  lastStart.setDate(lastStart.getDate() - 7);
   const lastEnd = new Date(thisStart);
   lastEnd.setMilliseconds(-1);
-
-  // End of current week
-  const thisEnd = new Date(thisStart);
-  thisEnd.setDate(thisStart.getDate() + 7);
-
-  return {
-    now,
-    thisStart,
-    thisEnd,
-    lastStart,
-    lastEnd
-  };
+  return { now, thisStart, thisEnd, lastStart, lastEnd };
 }
-
-
-// ============================================================
-// WEEK PROGRESS DISPLAY
-// ============================================================
 
 function updateWeekProgress() {
-  const weekProgress = $('weekProgress');
-
-  if (!weekProgress) {
-    return;
-  }
-
-  const today = new Date();
-
-  // Sunday = 0
-  // Monday = 1
-  // Tuesday = 2
-  // ...
-  // Saturday = 6
-  const day = today.getDay();
-
-  // Calculate Monday of the current week
-  const monday = new Date(today);
-
-  const diffToMonday =
-    day === 0
-      ? -6
-      : 1 - day;
-
-  monday.setDate(today.getDate() + diffToMonday);
-  monday.setHours(0, 0, 0, 0);
-
-  // Calculate Sunday of the current week
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  // Format dates
-  const dateOptions = {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  };
-
-  const mondayText =
-    monday.toLocaleDateString('en-US', dateOptions);
-
-  const sundayText =
-    sunday.toLocaleDateString('en-US', dateOptions);
-
-  weekProgress.textContent =
-    `Week in Progress: ${mondayText} – ${sundayText}`;
+  const el = $('weekProgress');
+  if (!el) return;
+  const { thisStart, thisEnd } = weekInfo();
+  const end = new Date(thisEnd);
+  end.setDate(end.getDate() - 1);
+  const opts = { month: 'long', day: 'numeric', year: 'numeric' };
+  el.textContent =
+    `Week in Progress: ${thisStart.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`;
 }
 
-
-// ============================================================
-// EXTRACT SUMMARY FROM GOOGLE SHEET
-// ============================================================
-
 function extractSummary(matrix) {
+  if (!Array.isArray(matrix) || matrix.length < 2) return [];
+
+  const header = matrix[0].map(v => clean(v).toLowerCase());
+  const rows = matrix.slice(1);
+  const findCol = (...patterns) => {
+    for (let i = 0; i < header.length; i++) {
+      if (patterns.some(p => p.test(header[i]))) return i;
+    }
+    return -1;
+  };
+
+  // The reporting summary has repeated Worker Email columns. Therefore
+  // weekly email columns are derived from their unique count columns.
+  const thisWeekCountCol =
+    findCol(/^submitted\s*this\s*week$/, /submitted.*this.*week/i);
+  const lastWeekCountCol =
+    findCol(/^submitted\s*last\s*week$/, /submitted.*last.*week/i);
+
+  const thisWeekEmailCol = thisWeekCountCol > 0 ? thisWeekCountCol - 1 : -1;
+  const lastWeekEmailCol = lastWeekCountCol > 0 ? lastWeekCountCol - 1 : -1;
+
+  const workerEmailCols = header
+    .map((h, i) => /worker\s*email/i.test(h) ? i : -1)
+    .filter(i => i >= 0);
+
+  const attendanceCols = header
+    .map((h, i) => /attendance/i.test(h) ? i : -1)
+    .filter(i => i >= 0);
+
+  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+  const normalizeEmail = v => clean(v).toLowerCase();
+  const attendanceEmails = new Set();
+
+  // Attendance can be represented either by email(s) in the Attendance
+  // column or by a status next to a Worker Email column.
+  for (const r of rows) {
+    for (const col of attendanceCols) {
+      const cell = clean(r[col]);
+      const directEmails = cell.match(emailPattern) || [];
+      for (const email of directEmails) attendanceEmails.add(normalizeEmail(email));
+
+      if (!directEmails.length && cell) {
+        const negative =
+          /^(absent|not attending|not present|off|leave|on leave|no|false|0|n\/a)$/i.test(cell);
+        if (!negative) {
+          // Use the Worker Email column closest to this Attendance column.
+          let nearest = -1, distance = Infinity;
+          for (const emailCol of workerEmailCols) {
+            const distanceToAttendance = Math.abs(emailCol - col);
+            if (distanceToAttendance < distance) {
+              nearest = emailCol;
+              distance = distanceToAttendance;
+            }
+          }
+          if (nearest >= 0) {
+            const email = normalizeEmail(r[nearest]);
+            if (emailPattern.test(email)) attendanceEmails.add(email);
+            emailPattern.lastIndex = 0;
+          }
+        }
+      }
+    }
+  }
+
   const result = new Map();
-
-  /*
-    Reporting table in the supplied sheet:
-
-    Last Week:
-      Worker Email.2       = column 36
-      Submitted Last Week  = column 37
-
-    This Week:
-      Worker Email         = column 28
-      Submitted Today      = column 29
-  */
-
-  for (const r of matrix.slice(1)) {
-
-    // -----------------------------
-    // LAST WEEK
-    // -----------------------------
-
-    const lastCb = clean(r[36]);
-    const lastVal = clean(r[37]);
-
-    if (lastCb) {
-      const item =
-        result.get(lastCb) || {
-          name: lastCb,
-          last: 0,
-          this: 0
-        };
-
-      item.last = num(lastVal);
-
-      result.set(lastCb, item);
+  const ensure = email => {
+    const key = normalizeEmail(email);
+    if (!key || !emailPattern.test(key)) {
+      emailPattern.lastIndex = 0;
+      return null;
     }
+    emailPattern.lastIndex = 0;
+    if (!result.has(key)) result.set(key, { name: key, last: 0, this: 0 });
+    return result.get(key);
+  };
 
-
-    // -----------------------------
-    // THIS WEEK
-    // -----------------------------
-
-    const todayCb = clean(r[28]);
-    const todayVal = clean(r[29]);
-
-    if (todayCb) {
-      const item =
-        result.get(todayCb) || {
-          name: todayCb,
-          last: 0,
-          this: 0
-        };
-
-      item.this += num(todayVal);
-
-      result.set(todayCb, item);
+  for (const r of rows) {
+    if (thisWeekEmailCol >= 0 && thisWeekCountCol >= 0) {
+      const item = ensure(r[thisWeekEmailCol]);
+      if (item) item.this = num(r[thisWeekCountCol]);
     }
+    if (lastWeekEmailCol >= 0 && lastWeekCountCol >= 0) {
+      const item = ensure(r[lastWeekEmailCol]);
+      if (item) item.last = num(r[lastWeekCountCol]);
+    }
+  }
+
+  // Attendance is authoritative whenever an Attendance column exists and
+  // produced a roster. Include attendees with zero output, then filter out
+  // everyone not on the Attendance roster.
+  if (attendanceCols.length && attendanceEmails.size) {
+    for (const email of attendanceEmails) {
+      if (!result.has(email)) result.set(email, { name: email, last: 0, this: 0 });
+    }
+    return [...result.values()].filter(x => attendanceEmails.has(x.name));
   }
 
   return [...result.values()];
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
+  );
+}
 
-// ============================================================
-// RENDER DASHBOARD
-// ============================================================
+function drawChart(data) {
+  const sorted = [...data].sort((a, b) =>
+    Math.max(b.last, b.this) - Math.max(a.last, a.this) ||
+    a.name.localeCompare(b.name)
+  );
+  const max = Math.max(15, ...sorted.flatMap(x => [x.last, x.this]));
+
+  $('chart').innerHTML = `
+    <div class="chart-note">
+      <span>Last week vs this week • Highest output first</span>
+      <span>0 = No Output • 1–7 = Need Attention • 8–14 = On Track • 15+ = Target Hit</span>
+    </div>
+    <div class="comparison-chart">
+      <div class="y-scale">
+        <span>${max}</span><span>${Math.round(max * .75)}</span>
+        <span>${Math.round(max * .5)}</span><span>${Math.round(max * .25)}</span><span>0</span>
+      </div>
+      <div class="chart-scroll"><div class="chart-grid">
+        ${sorted.map(x => {
+          const lastHeight = x.last === 0 ? 3 : Math.max(3, x.last / max * 250);
+          const thisHeight = x.this === 0 ? 3 : Math.max(3, x.this / max * 250);
+          const [, lastCls] = status(x.last);
+          const [, thisCls] = status(x.this);
+          return `
+            <div class="cb-column">
+              <div class="bars-pair">
+                <div class="bar-wrap" title="${escapeHtml(x.name)} — Last week: ${x.last}">
+                  <div class="bar-value">${x.last}</div>
+                  <div class="bar last-bar ${lastCls}" style="height:${lastHeight}px"></div>
+                </div>
+                <div class="bar-wrap" title="${escapeHtml(x.name)} — This week: ${x.this}">
+                  <div class="bar-value">${x.this}</div>
+                  <div class="bar this-bar ${thisCls}" style="height:${thisHeight}px"></div>
+                </div>
+              </div>
+              <div class="horizontal-name" title="${escapeHtml(x.name)}">${escapeHtml(x.name.split('@')[0])}</div>
+            </div>`;
+        }).join('')}
+      </div></div>
+    </div>
+    <div class="chart-legend">
+      <span><i class="legend-bar last"></i> Last Week</span>
+      <span><i class="legend-bar current"></i> This Week</span>
+    </div>`;
+}
+
+function drawTable(data) {
+  const q = clean($('searchBox')?.value).toLowerCase();
+  const sorted = data.filter(x => x.name.toLowerCase().includes(q))
+    .sort((a, b) => a.this - b.this || a.name.localeCompare(b.name));
+
+  $('tableBody').innerHTML = sorted.map(x => {
+    const [label, cls] = status(x.this);
+    const delta = x.this - x.last;
+    return `
+      <tr class="${cls === 'attention' ? 'attention-row' : ''}">
+        <td class="cb-name">${escapeHtml(x.name)}</td>
+        <td>${x.last}</td>
+        <td><strong>${x.this}</strong></td>
+        <td class="${delta < 0 ? 'negative' : delta > 0 ? 'positive' : ''}">
+          ${delta > 0 ? '+' : ''}${delta}
+        </td>
+        <td><span class="status ${cls}">${label}</span></td>
+      </tr>`;
+  }).join('') || '<tr><td colspan="5">No matching CBs.</td></tr>';
+}
+
+function drawComparison(data) {
+  $('comparison').innerHTML = [...data]
+    .sort((a, b) => a.this - b.this || a.name.localeCompare(b.name))
+    .map(x => {
+      const d = x.this - x.last;
+      const [label, cls] = status(x.this);
+      return `
+        <div class="compare-card ${cls}">
+          <div class="name">${escapeHtml(x.name)}</div>
+          <div class="compare-values">
+            <div><small>Last week</small><strong>${x.last}</strong></div>
+            <div><small>This week</small><strong>${x.this}</strong></div>
+          </div>
+          <div class="delta ${d < 0 ? 'negative' : d > 0 ? 'positive' : ''}">
+            ${d > 0 ? '+' : ''}${d} vs last week
+          </div>
+          <span class="status ${cls}">${label}</span>
+        </div>`;
+    }).join('') || '<div>No data found for the selected weeks.</div>';
+}
 
 function render() {
   const a = state;
+  const totalThis = a.data.reduce((s, x) => s + x.this, 0);
+  const totalLast = a.data.reduce((s, x) => s + x.last, 0);
 
-  const totalThis =
-    a.data.reduce((s, x) => s + x.this, 0);
-
-  const totalLast =
-    a.data.reduce((s, x) => s + x.last, 0);
-
-
-  // --------------------------------
-  // TOTALS
-  // --------------------------------
-
-  $('thisWeekTotal').textContent =
-    totalThis;
-
-  $('lastWeekTotal').textContent =
-    totalLast;
-
-
-  // --------------------------------
-  // THIS WEEK DATE RANGE
-  // --------------------------------
-
-  $('thisWeekRange').textContent =
-    `${fmt(a.thisStart)} – ${
-      fmt(
-        new Date(
-          Math.min(
-            a.now.getTime(),
-            a.thisEnd.getTime() - 1
-          )
-        )
-      )
-    }`;
-
-
-  // --------------------------------
-  // LAST WEEK DATE RANGE
-  // --------------------------------
-
-  $('lastWeekRange').textContent =
-    `${fmt(a.lastStart)} – ${fmt(a.lastEnd)}`;
-
-
-  // --------------------------------
-  // WEEK PROGRESS
-  // --------------------------------
-
+  $('thisWeekTotal').textContent = totalThis;
+  $('lastWeekTotal').textContent = totalLast;
+  $('thisWeekRange').textContent = `${fmt(a.thisStart)} – ${fmt(new Date(Math.min(a.now.getTime(), a.thisEnd.getTime() - 1)))}`;
+  $('lastWeekRange').textContent = `${fmt(a.lastStart)} – ${fmt(a.lastEnd)}`;
   updateWeekProgress();
 
-
-  // --------------------------------
-  // ATTENTION COUNT
-  // --------------------------------
-
   $('attentionCount').textContent =
-    a.data.filter(x => x.this <= 7).length;
-
-
-  // --------------------------------
-  // TARGET COUNT
-  // --------------------------------
-
+    a.data.filter(x => x.this >= 1 && x.this <= 7).length;
   $('targetCount').textContent =
     a.data.filter(x => x.this >= 15).length;
 
-
-  // --------------------------------
-  // LAST UPDATED
-  // --------------------------------
-
-  $('updatedAt').textContent =
-    `Updated ${new Date().toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    })}`;
-
-
-  // --------------------------------
-  // DRAW COMPONENTS
-  // --------------------------------
+  $('updatedAt').textContent = `Updated ${new Date().toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit'
+  })}`;
 
   drawChart(a.data);
   drawTable(a.data);
   drawComparison(a.data);
 }
 
-
-// ============================================================
-// DRAW CHART
-// ============================================================
-
-function drawChart(data) {
-
-  const sorted = [...data].sort(
-    (x, y) =>
-      x.this - y.this ||
-      x.name.localeCompare(y.name)
-  );
-
-  const max =
-    Math.max(
-      15,
-      ...sorted.map(x => x.this)
-    );
-
-
-  $('chart').innerHTML = `
-
-    <div class="chart-note">
-
-      <span>
-        Lowest production first
-      </span>
-
-      <span>
-        0 = No Output •
-        1–7 = Need Attention •
-        8–14 = On Track •
-        15+ = Target Hit
-      </span>
-
-    </div>
-
-    <div class="bars">
-
-      ${sorted.map(x => {
-
-        const [label, cls] =
-          status(x.this);
-
-        const h =
-          x.this === 0
-            ? 4
-            : Math.max(
-                4,
-                x.this / max * 250
-              );
-
-        return `
-
-          <div
-            class="bar-group"
-            title="${escapeHtml(x.name)} — ${x.this} (${label})"
-          >
-
-            <div class="bar-value">
-              ${x.this}
-            </div>
-
-            <div
-              class="bar ${cls}"
-              style="height:${h}px"
-            ></div>
-
-            <div class="bar-name">
-              ${escapeHtml(
-                x.name.split('@')[0]
-              )}
-            </div>
-
-          </div>
-
-        `;
-
-      }).join('')}
-
-    </div>
-
-  `;
-}
-
-
-// ============================================================
-// DRAW TABLE
-// ============================================================
-
-function drawTable(data) {
-
-  const q =
-    clean(
-      $('searchBox')?.value
-    ).toLowerCase();
-
-
-  const sorted =
-    data
-      .filter(x =>
-        x.name
-          .toLowerCase()
-          .includes(q)
-      )
-      .sort(
-        (x, y) =>
-          x.this - y.this ||
-          x.name.localeCompare(y.name)
-      );
-
-
-  $('tableBody').innerHTML =
-
-    sorted.map(x => {
-
-      const [label, cls] =
-        status(x.this);
-
-      const delta =
-        x.this - x.last;
-
-
-      return `
-
-        <tr class="${
-          cls === 'attention'
-            ? 'attention-row'
-            : ''
-        }">
-
-          <td class="cb-name">
-            ${escapeHtml(x.name)}
-          </td>
-
-          <td>
-            ${x.last}
-          </td>
-
-          <td>
-            <strong>
-              ${x.this}
-            </strong>
-          </td>
-
-          <td class="${
-            delta < 0
-              ? 'negative'
-              : delta > 0
-                ? 'positive'
-                : ''
-          }">
-
-            ${delta > 0 ? '+' : ''}
-            ${delta}
-
-          </td>
-
-          <td>
-
-            <span class="status ${cls}">
-              ${label}
-            </span>
-
-          </td>
-
-        </tr>
-
-      `;
-
-    }).join('')
-
-    ||
-
-    `
-      <tr>
-        <td colspan="5">
-          No matching CBs.
-        </td>
-      </tr>
-    `;
-}
-
-
-// ============================================================
-// DRAW COMPARISON
-// ============================================================
-
-function drawComparison(data) {
-
-  $('comparison').innerHTML =
-
-    [...data]
-
-      .sort(
-        (a, b) =>
-          a.this - b.this ||
-          a.name.localeCompare(b.name)
-      )
-
-      .map(x => {
-
-        const d =
-          x.this - x.last;
-
-        const [label, cls] =
-          status(x.this);
-
-
-        return `
-
-          <div class="compare-card ${cls}">
-
-            <div class="name">
-              ${escapeHtml(x.name)}
-            </div>
-
-
-            <div class="compare-values">
-
-              <div>
-
-                <small>
-                  Last week
-                </small>
-
-                <strong>
-                  ${x.last}
-                </strong>
-
-              </div>
-
-
-              <div>
-
-                <small>
-                  This week
-                </small>
-
-                <strong>
-                  ${x.this}
-                </strong>
-
-              </div>
-
-            </div>
-
-
-            <div class="delta ${
-              d < 0
-                ? 'negative'
-                : d > 0
-                  ? 'positive'
-                  : ''
-            }">
-
-              ${d > 0 ? '+' : ''}
-              ${d} vs last week
-
-            </div>
-
-
-            <span class="status ${cls}">
-              ${label}
-            </span>
-
-          </div>
-
-        `;
-
-      })
-
-      .join('')
-
-      ||
-
-      `
-        <div>
-          No data found for the selected weeks.
-        </div>
-      `;
-}
-
-
-// ============================================================
-// HTML ESCAPE
-// ============================================================
-
-function escapeHtml(s) {
-
-  return String(s).replace(
-    /[&<>\"]/g,
-
-    c => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;'
-    }[c])
-  );
-}
-
-
-// ============================================================
-// LOAD GOOGLE SHEET DATA
-// ============================================================
-
 async function load() {
-
   try {
-
     $('error').classList.add('hidden');
+    $('updatedAt').textContent = 'Loading…';
 
-    $('updatedAt').textContent =
-      'Loading…';
+    const res = await fetch(DATA_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`Google Sheet returned HTTP ${res.status}`);
 
+    const text = await res.text();
+    const matrix = parseCSV(text);
+    if (matrix.length < 2) throw new Error('The published sheet returned no usable rows.');
 
-    const res =
-      await fetch(
-        DATA_URL,
-        {
-          cache: 'no-store'
-        }
-      );
-
-
-    if (!res.ok) {
-
-      throw new Error(
-        `Google Sheet returned HTTP ${res.status}`
-      );
-
-    }
-
-
-    const text =
-      await res.text();
-
-
-    const matrix =
-      parseCSV(text);
-
-
-    if (matrix.length < 2) {
-
-      throw new Error(
-        'The published sheet returned no usable rows.'
-      );
-
-    }
-
-
-    const data =
-      extractSummary(matrix);
-
-
+    const data = extractSummary(matrix);
     if (!data.length) {
-
-      throw new Error(
-        'No CB records were detected in the published production sheet. Check the published sheet data and column structure.'
-      );
-
+      throw new Error('No CB records were detected in the published production sheet. Check the Attendance and reporting summary columns.');
     }
 
-
-    const w =
-      weekInfo();
-
-
-    state = {
-      data,
-      ...w
-    };
-
-
+    state = { data, ...weekInfo() };
     render();
-
-  }
-
-
-  catch (e) {
-
-    $('error').textContent =
-      `Unable to load production data: ${e.message}`;
-
+  } catch (e) {
+    $('error').textContent = `Unable to load production data: ${e.message}`;
     $('error').classList.remove('hidden');
-
-    $('updatedAt').textContent =
-      'Data load failed';
-
+    $('updatedAt').textContent = 'Data load failed';
     console.error(e);
-
   }
-
 }
 
-
-// ============================================================
-// REFRESH BUTTON
-// ============================================================
-
-$('refreshBtn').addEventListener(
-  'click',
-  load
-);
-
-
-// ============================================================
-// SEARCH BOX
-// ============================================================
-
-$('searchBox').addEventListener(
-  'input',
-  () => {
-
-    drawTable(
-      state.data || []
-    );
-
-  }
-);
-
-
-// ============================================================
-// INITIAL LOAD
-// ============================================================
-
+$('refreshBtn').addEventListener('click', load);
+$('searchBox').addEventListener('input', () => drawTable(state.data || []));
 load();
-
-
-// ============================================================
-// AUTOMATIC WEEK DISPLAY UPDATE
-// ============================================================
-
-// Update the week display immediately
-updateWeekProgress();
-
-// Keep the week display accurate if the page
-// remains open across midnight.
-setInterval(
-  updateWeekProgress,
-  60 * 1000
-);
+setInterval(updateWeekProgress, 60 * 1000);
