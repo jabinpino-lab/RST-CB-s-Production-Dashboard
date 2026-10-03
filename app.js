@@ -222,7 +222,7 @@ function drawChart(data) {
 function drawTable(data) {
   const q = clean($('searchBox')?.value).toLowerCase();
   const sorted = data.filter(x => x.name.toLowerCase().includes(q))
-    .sort((a, b) => a.this - b.this || a.name.localeCompare(b.name));
+    .sort((a, b) => b.this - a.this || b.last - a.last || a.name.localeCompare(b.name));
 
   $('tableBody').innerHTML = sorted.map(x => {
     const [label, cls] = status(x.this);
@@ -242,7 +242,7 @@ function drawTable(data) {
 
 function drawComparison(data) {
   $('comparison').innerHTML = [...data]
-    .sort((a, b) => a.this - b.this || a.name.localeCompare(b.name))
+    .sort((a, b) => b.this - a.this || b.last - a.last || a.name.localeCompare(b.name))
     .map(x => {
       const d = x.this - x.last;
       const [label, cls] = status(x.this);
