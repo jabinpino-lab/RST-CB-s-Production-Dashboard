@@ -1,5 +1,5 @@
 const DATA_URL =
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vTQ3Fh4bxosYRMoK5zeC5wbhNw6621gqbtkDgQD_XgC9RYrSalOHFbEgGWWLU_P8DmhwhhMJvNOFpaO/pub?gid=0&single=true&output=csv';
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSdXbqQMwQexp1zCBc_KlIFanBr9UoOaxyDL_3keNkKUvmuujQNTPPfhDdBeMg6NhlMp9i_1kINnjC1/pub?gid=1105569847&single=true&output=csv';
 
 let rows = [];
 let state = {};
@@ -721,7 +721,7 @@ async function load() {
     if (!data.length) {
 
       throw new Error(
-        'No CB records were found in the reporting summary columns.'
+        'No CB records were detected in the published production sheet. Check the published sheet data and column structure.'
       );
 
     }
