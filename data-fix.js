@@ -113,7 +113,7 @@
     // attendance column is a status column, pair it with the Worker Email
     // column on the same row.
     const attendanceCols = header
-      .map((h, i) => /attendance/.test(h) ? i : -1)
+      .map((h, i) => /^attendance$/.test(h) ? i : -1)
       .filter(i => i >= 0);
 
     const emailCols = header
@@ -149,7 +149,7 @@
     function isAttending(email) {
       // If the sheet exposes an Attendance column, it becomes the source
       // of truth for which CB emails are displayed.
-      if (!attendanceCols.length) return true;
+      if (!attendanceCols.length) return false;
       return attendanceEmails.has(String(email ?? '').trim().toLowerCase());
     }
 
