@@ -82,15 +82,22 @@ function updateWeekProgress() {
 function extractAttendanceEmails(matrix) {
   if (!Array.isArray(matrix) || matrix.length < 2) return new Set();
 
-  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi;
   const emails = new Set();
 
-  // Attendance is a separate tab. Treat every email present in the
-  // published Attendance CSV as an attending CB.
+  // Attendance is a separate tab. Treat every cell containing a normal
+  // email address as an attending CB. Avoid a regex here so escaping in
+  // generated source cannot prevent valid emails from being detected.
+  const isEmail = value => {
+    const email = clean(value).toLowerCase();
+    const at = email.indexOf('@');
+    const dot = email.lastIndexOf('.');
+    return at > 0 && dot > at + 1 && dot < email.length - 1 && !email.includes(' ');
+  };
+
   for (const row of matrix) {
     for (const cell of row) {
-      const matches = clean(cell).match(emailPattern) || [];
-      for (const email of matches) emails.add(email.toLowerCase().trim());
+      const value = clean(cell).replace(/,/g, '');
+      if (isEmail(value)) emails.add(value);
     }
   }
 
@@ -113,20 +120,26 @@ function extractSummary(matrix, attendanceEmails = new Set()) {
   // weekly email column from the Worker Email immediately before its
   // corresponding Submitted This/Last Week column.
   const thisWeekCountCol =
-    findCol(/^submitted\\s*this\\s*week$/, /submitted.*this.*week/i);
+    findCol(/^submitted *this *week$/, /submitted.*this.*week/i);
   const lastWeekCountCol =
-    findCol(/^submitted\\s*last\\s*week$/, /submitted.*last.*week/i);
+    findCol(/^submitted *last *week$/, /submitted.*last.*week/i);
 
   const thisWeekEmailCol = thisWeekCountCol > 0 ? thisWeekCountCol - 1 : -1;
   const lastWeekEmailCol = lastWeekCountCol > 0 ? lastWeekCountCol - 1 : -1;
 
-  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i;
   const normalizeEmail = v => clean(v).toLowerCase();
+
+  const isEmail = value => {
+    const email = normalizeEmail(value);
+    const at = email.indexOf('@');
+    const dot = email.lastIndexOf('.');
+    return at > 0 && dot > at + 1 && dot < email.length - 1 && !email.includes(' ');
+  };
 
   const result = new Map();
   const ensure = email => {
     const key = normalizeEmail(email);
-    if (!emailPattern.test(key)) return null;
+    if (!isEmail(key)) return null;
     if (!result.has(key)) result.set(key, { name: key, last: 0, this: 0 });
     return result.get(key);
   };
