@@ -278,9 +278,6 @@ async function load() {
     $('error').classList.add('hidden');
     $('updatedAt').textContent = 'Loading…';
 
-    const res = await fetch(DATA_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Google Sheet returned HTTP ${res.status}`);
-
     const [reportingRes, attendanceRes] = await Promise.all([
       fetch(DATA_URL, { cache: 'no-store' }),
       fetch(ATTENDANCE_URL, { cache: 'no-store' })
