@@ -117,17 +117,17 @@
 
     // Use the actual reporting-table labels instead of fixed column numbers.
     // The supplied sheet has separate sections for Today, This Week and Last Week.
-    const workerEmailCol = findCol(/^worker\\s*email(?:\\.\\d+)?$/i, /worker\\s*email/i);
-    const thisWeekEmailCol = findCol(/^worker\\s*email(?:\\.1)?$/i);
-    const lastWeekEmailCol = findCol(/^worker\\s*email(?:\\.2)?$/i);
-    const thisWeekCountCol = findCol(/^submitted\\s*this\\s*week$/i, /submitted.*this.*week/i);
-    const lastWeekCountCol = findCol(/^submitted\\s*last\\s*week$/i, /submitted.*last.*week/i);
+    const workerEmailCol = findCol(/^worker\s*email(?:\.\\d+)?$/i, /worker\s*email/i);
+    const thisWeekEmailCol = findCol(/^worker\s*email(?:\.1)?$/i);
+    const lastWeekEmailCol = findCol(/^worker\s*email(?:\.2)?$/i);
+    const thisWeekCountCol = findCol(/^submitted\s*this\s*week$/i, /submitted.*this.*week/i);
+    const lastWeekCountCol = findCol(/^submitted\s*last\s*week$/i, /submitted.*last.*week/i);
 
     const attendanceCols = header
       .map((h, i) => /attendance/.test(h) ? i : -1)
       .filter(i => i >= 0);
 
-    const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi;
+    const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
     const attendanceEmails = new Set();
     const normalizeEmail = value => String(value ?? '').trim().toLowerCase();
 
