@@ -107,28 +107,54 @@ function extractAttendanceEmails(matrix) {
 function extractSummary(matrix, attendanceEmails = new Set()) {
   if (!Array.isArray(matrix) || matrix.length < 2) return [];
 
-  const header = matrix[0].map(v => clean(v).toLowerCase());
-  const rows = matrix.slice(1);
-  const findCol = (...patterns) => {
-    for (let i = 0; i < header.length; i++) {
-      if (patterns.some(p => p.test(header[i]))) return i;
+  const normalizeHeader = value =>
+    clean(value).toLowerCase().replace(/[_\\n\\r]+/g, ' ').replace(/\\s+/g, ' ');
+
+  // Google Sheets can publish title/merged rows before the actual column
+  // labels. Search the first several rows instead of assuming row 1 is headers.
+  let headerRowIndex = -1;
+  let header = [];
+  let bestScore = -1;
+
+  const maxHeaderScan = Math.min(matrix.length, 12);
+  for (let rowIndex = 0; rowIndex < maxHeaderScan; rowIndex++) {
+    const candidate = matrix[rowIndex].map(normalizeHeader);
+    const hasThis = candidate.some(v => /submitted\\s*this\\s*week/i.test(v));
+    const hasLast = candidate.some(v => /submitted\\s*last\\s*week/i.test(v));
+    const hasEmail = candidate.some(v => /worker\\s*email|active\\s*email/i.test(v));
+    const score = Number(hasThis) + Number(hasLast) + Number(hasEmail);
+    if (score > bestScore) {
+      bestScore = score;
+      headerRowIndex = rowIndex;
+      header = candidate;
     }
-    return -1;
+    if (hasThis && hasLast && hasEmail) break;
+  }
+
+  const findCol = pattern => header.findIndex(value => pattern.test(value));
+  const thisWeekCountCol = findCol(/submitted\\s*this\\s*week/i);
+  const lastWeekCountCol = findCol(/submitted\\s*last\\s*week/i);
+
+  const findEmailCol = countCol => {
+    if (countCol < 0) return -1;
+    // Prefer the nearest preceding Worker Email header. Fall back to the
+    // immediately preceding column for the published summary's paired layout.
+    for (let i = countCol - 1; i >= 0; i--) {
+      if (/worker\\s*email|active\\s*email/i.test(header[i])) return i;
+    }
+    return countCol > 0 ? countCol - 1 : -1;
   };
 
-  // The reporting summary has repeated Worker Email columns. Derive each
-  // weekly email column from the Worker Email immediately before its
-  // corresponding Submitted This/Last Week column.
-  const thisWeekCountCol =
-    findCol(/^submitted *this *week$/, /submitted.*this.*week/i);
-  const lastWeekCountCol =
-    findCol(/^submitted *last *week$/, /submitted.*last.*week/i);
+  const thisWeekEmailCol = findEmailCol(thisWeekCountCol);
+  const lastWeekEmailCol = findEmailCol(lastWeekCountCol);
 
-  const thisWeekEmailCol = thisWeekCountCol > 0 ? thisWeekCountCol - 1 : -1;
-  const lastWeekEmailCol = lastWeekCountCol > 0 ? lastWeekCountCol - 1 : -1;
+  if (thisWeekCountCol < 0 && lastWeekCountCol < 0) {
+    throw new Error(
+      'The reporting sheet headers for Submitted This Week and Submitted Last Week could not be found. Check the published Reporting tab.'
+    );
+  }
 
-  const normalizeEmail = v => clean(v).toLowerCase();
-
+  const normalizeEmail = value => clean(value).toLowerCase();
   const isEmail = value => {
     const email = normalizeEmail(value);
     const at = email.indexOf('@');
@@ -144,7 +170,8 @@ function extractSummary(matrix, attendanceEmails = new Set()) {
     return result.get(key);
   };
 
-  for (const r of rows) {
+  // Read all rows after the detected header row. Ignore title/header rows.
+  for (const r of matrix.slice(headerRowIndex + 1)) {
     if (thisWeekEmailCol >= 0 && thisWeekCountCol >= 0) {
       const item = ensure(r[thisWeekEmailCol]);
       if (item) item.this = num(r[thisWeekCountCol]);
@@ -155,8 +182,8 @@ function extractSummary(matrix, attendanceEmails = new Set()) {
     }
   }
 
-  // Attendance is authoritative. Every attendee is shown, including 0 output.
-  // Anyone present only in the reporting summary is excluded.
+  // Attendance Column F is the authoritative roster. Keep active CBs with
+  // zero production, and exclude all reporting-only email addresses.
   if (attendanceEmails.size) {
     return [...attendanceEmails].map(email => {
       const item = result.get(email);
@@ -164,7 +191,7 @@ function extractSummary(matrix, attendanceEmails = new Set()) {
     });
   }
 
-  throw new Error('The Attendance sheet returned no CB emails.');
+  throw new Error('No active CB emails were found in Attendance Column F (Active Email).');
 }
 
 function escapeHtml(s) {
